@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: idurar_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-changeme123}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-idurar_db}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - idurar_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: idurar_backend
+    restart: unless-stopped
+    environment:
+      DATABASE: ${DATABASE:-mongodb://mongodb:27017/idurar_db}
+      JWT_SECRET: ${JWT_SECRET}
+      NODE_ENV: ${NODE_ENV:-production}
+      OPENSSL_CONF: ${OPENSSL_CONF:-/dev/null}
+      PUBLIC_SERVER_FILE: ${PUBLIC_SERVER_FILE:-http://localhost:8085/}
+      RESEND_API: ${RESEND_API}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PORT: ${PORT:-8888}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - idurar_network
+    volumes:
+      - backend_uploads:/app/public/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8888/api', (r) => {process.exit(r.statusCode === 404 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Web App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: idurar_frontend
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - idurar_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8085/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  idurar_network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  backend_uploads:
+    driver: local
