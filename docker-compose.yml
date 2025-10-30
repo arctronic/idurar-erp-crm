@@ -62,8 +62,7 @@ services:
     ports:
       - "8085:8085"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - idurar_network
     healthcheck:
