@@ -15,6 +15,9 @@ RUN npm ci
 # Copy application source
 COPY . .
 
+# Set build-time environment variables for API URLs
+ENV VITE_BACKEND_SERVER=/
+
 # Build the application
 RUN npm run build
 
